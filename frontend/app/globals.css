@@ -1,0 +1,41 @@
+@import "tailwindcss";
+
+:root {
+  --background: #F9F8F6; /* App background */
+  --foreground: #2c1b1b; /* Text color (kept readable) */
+
+  --primary: #C9B59C;    /* Main brand / buttons */
+  --secondary: #D9CFC7;  /* Borders / secondary UI */
+  --accent: #EFE9E3;     /* Cards / surfaces */
+  --light: #F9F8F6;      /* Soft background */
+}
+
+/* Tailwind theme mapping */
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-primary: var(--primary);
+  --color-secondary: var(--secondary);
+  --color-accent: var(--accent);
+  --color-light: var(--light);
+
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    /* Using same earthy palette (no forced colors) */
+    --background: #F9F8F6;
+    --foreground: #2C241B;
+    --primary: #C9B59C;
+    --secondary: #D9CFC7;
+    --accent: #EFE9E3;
+    --light: #F9F8F6;
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+}
