@@ -6,6 +6,8 @@ import { fetchMessById } from '../../../lib/api';
 import { Button } from '../../../components/ui/Button';
 import { Card, CardContent, CardHeader } from '../../../components/ui/Card';
 
+import { AvatarFallback } from '../../../components/AvatarFallback';
+
 interface IMenu {
     item: string;
     description: string;
@@ -29,6 +31,10 @@ interface MessDetails {
     whatsappLink?: string;
     isMenuAvailable: boolean;
     menu?: Record<DayOfWeek, IMealPlan>;
+    logo?: {
+        url: string;
+        public_id: string;
+    };
 }
 
 export default function MessDetailsPage() {
@@ -63,15 +69,23 @@ export default function MessDetailsPage() {
     return (
         <div className="min-h-screen p-8 sm:p-20">
             <div className="max-w-4xl mx-auto">
-                <div className="flex flex-col md:flex-row justify-between items-start mb-8 gap-4">
-                    <div>
-                        <h1 className="text-4xl font-bold text-primary dark:text-foreground mb-2">{mess.name}</h1>
-                        <p className="text-xl text-gray-600 dark:text-gray-400">📍 {mess.area}</p>
+                <div className="flex flex-col md:flex-row items-center md:items-start mb-8 gap-6 border-b pb-8">
+                    <div className="w-32 h-32 rounded-2xl overflow-hidden bg-white/10 shrink-0 border-2 border-primary/20">
+                        {mess.logo ? (
+                            <img src={mess.logo.url} alt={mess.name} className="w-full h-full object-cover" />
+                        ) : (
+                            <AvatarFallback name={mess.name} size="xl" />
+                        )}
                     </div>
-                    <div className="md:text-right">
-                        <p className="text-2xl font-bold text-foreground">₹ {mess.priceRange}</p>
-                        <p className="text-sm text-gray-500">Monthly Est.</p>
-                        
+                    <div className="grow flex flex-col md:flex-row justify-between items-center md:items-start gap-4">
+                        <div className="text-center md:text-left">
+                            <h1 className="text-4xl font-bold text-primary dark:text-foreground mb-2">{mess.name}</h1>
+                            <p className="text-xl text-gray-600 dark:text-gray-400">📍 {mess.area}</p>
+                        </div>
+                        <div className="text-center md:text-right">
+                            <p className="text-2xl font-bold text-foreground">₹ {mess.priceRange}</p>
+                            <p className="text-sm text-gray-500">Monthly Est.</p>
+                        </div>
                     </div>
                 </div>
 
@@ -96,8 +110,8 @@ export default function MessDetailsPage() {
                                                     key={day}
                                                     onClick={() => setActiveDay(day)}
                                                     className={`px-4 py-2 rounded-full text-sm font-medium capitalize whitespace-nowrap transition-colors ${activeDay === day
-                                                            ? 'bg-accent text-white'
-                                                            : 'bg-gray-100 dark:bg-white/10 hover:bg-gray-200 dark:hover:bg-white/20'
+                                                        ? 'bg-accent text-white'
+                                                        : 'bg-gray-100 dark:bg-white/10 hover:bg-gray-200 dark:hover:bg-white/20'
                                                         }`}
                                                 >
                                                     {day}

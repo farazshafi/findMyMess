@@ -6,6 +6,7 @@ import { fetchMesses } from '../../lib/api';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Card, CardContent, CardHeader } from '../../components/ui/Card';
+import { AvatarFallback } from '../../components/AvatarFallback';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
 
@@ -41,8 +42,10 @@ function AdminContent() {
         priceRange: '',
         phone: '',
         whatsappLink: '',
-        isMenuAvailable: false
+        isMenuAvailable: false,
+        logo: null as File | null
     });
+    const [logoPreview, setLogoPreview] = useState<string | null>(null);
 
     const [weeklyMenu, setWeeklyMenu] = useState<Record<DayOfWeek, IMealPlan>>({
         monday: { ...EMPTY_MEAL_PLAN },
@@ -78,15 +81,25 @@ function AdminContent() {
     async function handleSubmit(e: React.FormEvent) {
         e.preventDefault();
         try {
-            const payload = {
-                ...formData,
-                menu: formData.isMenuAvailable ? weeklyMenu : undefined
-            };
+            const formDataToSend = new FormData();
+            formDataToSend.append('name', formData.name);
+            formDataToSend.append('area', formData.area);
+            formDataToSend.append('priceRange', formData.priceRange);
+            formDataToSend.append('phone', formData.phone);
+            formDataToSend.append('whatsappLink', formData.whatsappLink);
+            formDataToSend.append('isMenuAvailable', String(formData.isMenuAvailable));
+
+            if (formData.logo) {
+                formDataToSend.append('logo', formData.logo);
+            }
+
+            if (formData.isMenuAvailable) {
+                formDataToSend.append('menu', JSON.stringify(weeklyMenu));
+            }
 
             const res = await fetch(`${API_BASE_URL}/messes`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
+                body: formDataToSend
             });
 
             if (res.ok) {
@@ -100,8 +113,10 @@ function AdminContent() {
                     priceRange: '',
                     phone: '',
                     whatsappLink: '',
-                    isMenuAvailable: false
+                    isMenuAvailable: false,
+                    logo: null
                 });
+                setLogoPreview(null);
                 setWeeklyMenu({
                     monday: { ...EMPTY_MEAL_PLAN },
                     tuesday: { ...EMPTY_MEAL_PLAN },
@@ -113,7 +128,7 @@ function AdminContent() {
                 });
                 setActiveDay('monday');
             } else {
-                alert('Failed to add mess');
+                alert('Failed to add mess. Please check the form.');
             }
         } catch (err) {
             alert('Error submitting form');
@@ -121,8 +136,20 @@ function AdminContent() {
     }
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement>, field: string) => {
-        const value = e.target.type === 'checkbox' ? e.target.checked : e.target.value;
-        setFormData({ ...formData, [field]: value });
+        if (e.target.type === 'file') {
+            const file = e.target.files?.[0] || null;
+            setFormData({ ...formData, [field]: file });
+            if (file) {
+                const reader = new FileReader();
+                reader.onloadend = () => setLogoPreview(reader.result as string);
+                reader.readAsDataURL(file);
+            } else {
+                setLogoPreview(null);
+            }
+        } else {
+            const value = e.target.type === 'checkbox' ? e.target.checked : e.target.value;
+            setFormData({ ...formData, [field]: value });
+        }
     };
 
     const handleMenuChange = (e: React.ChangeEvent<HTMLInputElement>, mealType: 'breakfast' | 'lunch' | 'dinner', field: 'item' | 'description') => {
@@ -160,6 +187,27 @@ function AdminContent() {
                             <div className="grid grid-cols-2 gap-4">
                                 <Input className='text-light placeholder:text-light/50' placeholder="Phone" value={formData.phone} onChange={(e) => handleChange(e, 'phone')} required />
                                 <Input className='text-light placeholder:text-light/50' placeholder="WhatsApp Link (Optional)" value={formData.whatsappLink} onChange={(e) => handleChange(e, 'whatsappLink')} />
+                            </div>
+
+                            {/* Logo Upload */}
+                            <div className="space-y-2 border p-4 rounded-lg">
+                                <label className="block text-sm font-medium mb-1">Mess Logo (Needed)</label>
+                                <div className="flex items-center gap-4">
+                                    <div className="w-20 h-20 rounded-lg overflow-hidden bg-white/10 flex items-center justify-center border-2 border-dashed border-white/20">
+                                        {logoPreview ? (
+                                            <img src={logoPreview} alt="Logo preview" className="w-full h-full object-cover" />
+                                        ) : (
+                                            <span className="text-xs text-white/40">No Logo</span>
+                                        )}
+                                    </div>
+                                    <input
+                                        type="file"
+                                        accept="image/*"
+                                        onChange={(e) => handleChange(e, 'logo')}
+                                        className="text-sm text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-accent file:text-white hover:file:bg-accent/80 cursor-pointer"
+                                        required
+                                    />
+                                </div>
                             </div>
 
                             {/* Menu Availability Toggle */}
@@ -263,19 +311,28 @@ function AdminContent() {
 
             <div className="grid grid-cols-1 gap-4">
                 {messes.map((mess) => (
-                    <Card key={mess._id} className="flex flex-col sm:flex-row justify-between items-center p-4">
-                        <div>
-                            <h3 className="text-xl font-bold">{mess.name}</h3>
-                            <p className="text-sm text-gray-500">{mess.area} - {mess.priceRange}</p>
-                            {mess.isMenuAvailable ? (
-                                <span className="inline-block mt-1 px-2 py-0.5 rounded text-xs bg-green-500/20 text-green-500 border border-green-500/30">
-                                    Menu Available
-                                </span>
-                            ) : (
-                                <span className="inline-block mt-1 px-2 py-0.5 rounded text-xs bg-red-500/20 text-red-500 border border-red-500/30">
-                                    No Menu
-                                </span>
-                            )}
+                    <Card key={mess._id} className="flex flex-col sm:flex-row justify-between items-center p-4 gap-4">
+                        <div className="flex items-center gap-4 w-full">
+                            <div className="w-16 h-16 rounded-lg overflow-hidden bg-white/10 shrink-0 border border-white/20">
+                                {mess.logo ? (
+                                    <img src={mess.logo.url} alt={mess.name} className="w-full h-full object-cover" />
+                                ) : (
+                                    <AvatarFallback name={mess.name} size="md" />
+                                )}
+                            </div>
+                            <div className="grow">
+                                <h3 className="text-xl font-bold">{mess.name}</h3>
+                                <p className="text-sm text-gray-500">{mess.area} - {mess.priceRange}</p>
+                                {mess.isMenuAvailable ? (
+                                    <span className="inline-block mt-1 px-2 py-0.5 rounded text-xs bg-green-500/20 text-green-500 border border-green-500/30">
+                                        Menu Available
+                                    </span>
+                                ) : (
+                                    <span className="inline-block mt-1 px-2 py-0.5 rounded text-xs bg-red-500/20 text-red-500 border border-red-500/30">
+                                        No Menu
+                                    </span>
+                                )}
+                            </div>
                         </div>
                         <div className="flex gap-2 mt-4 sm:mt-0">
                             <Button variant="outline" size="sm" onClick={() => alert('Edit feature coming soon')}>Edit</Button>

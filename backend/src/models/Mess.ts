@@ -29,6 +29,10 @@ export interface IMess extends Document {
     menu?: IWeeklyMenu; // Made optional because isMenuAvailable could be false
     phone: string;
     whatsappLink?: string;
+    logo?: {
+        url: string;
+        public_id: string;
+    };
     photos?: string[];
     createdAt: Date;
     updatedAt: Date;
@@ -67,6 +71,10 @@ const MessSchema: Schema = new Schema({
     menu: WeeklyMenuSchema,
     phone: { type: String, required: true },
     whatsappLink: { type: String },
+    logo: {
+        url: { type: String },
+        public_id: { type: String }
+    },
     photos: [{ type: String }],
 }, {
     timestamps: true

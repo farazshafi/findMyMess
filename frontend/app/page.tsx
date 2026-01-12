@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { Button } from '../components/ui/Button';
 import { Card, CardContent } from '../components/ui/Card';
 import { fetchMesses } from '../lib/api';
+import { AvatarFallback } from '../components/AvatarFallback';
 
 export const dynamic = 'force-dynamic';
 
@@ -44,10 +45,10 @@ export default async function Home() {
                 <Card className="h-full hover:shadow-2xl transition-shadow duration-300 cursor-pointer">
                   <CardContent className="p-6">
                     <div className="h-40 bg-gray-200 dark:bg-gray-700 rounded-md mb-4 flex items-center justify-center text-foreground-400 overflow-hidden relative">
-                      {mess.photos && mess.photos.length > 0 ? (
-                        <img src={mess.photos[0]} alt={mess.name} className="w-full h-full object-cover" />
+                      {mess.logo ? (
+                        <img src={mess.logo.url} alt={mess.name} className="w-full h-full object-cover" />
                       ) : (
-                        <span>No Photo</span>
+                        <AvatarFallback name={mess.name} size="xl" />
                       )}
                     </div>
                     <h3 className="text-xl font-bold text-foreground dark:text-light mb-2 text-left">{mess.name}</h3>

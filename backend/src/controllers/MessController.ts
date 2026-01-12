@@ -1,6 +1,8 @@
 import { Request, Response } from 'express';
 import { MessService } from '../services/MessService';
 import { MessRepository } from '../repositories/MessRepository';
+import fs from 'fs';
+import path from 'path';
 
 const messRepository = new MessRepository();
 const messService = new MessService(messRepository);
@@ -34,16 +36,56 @@ export class MessController {
 
     static async create(req: Request, res: Response) {
         try {
-            const mess = await messService.createMess(req.body);
+            const messData = req.body;
+
+            // If menu is sent as a string (common in multipart/form-data), parse it
+            if (typeof messData.menu === 'string') {
+                try {
+                    messData.menu = JSON.parse(messData.menu);
+                } catch (e) {
+                    console.error('Error parsing menu JSON:', e);
+                }
+            }
+
+            if (req.file) {
+                messData.logo = {
+                    url: (req.file as any).path,
+                    public_id: (req.file as any).filename
+                };
+            }
+
+            const mess = await messService.createMess(messData);
             res.status(201).json(mess);
         } catch (error) {
-            res.status(400).json({ error: 'Failed to create mess', details: error });
+            console.error('Error creating mess:', error);
+            res.status(400).json({
+                error: 'Failed to create mess',
+                details: JSON.parse(JSON.stringify(error, Object.getOwnPropertyNames(error)))
+            });
         }
     }
 
     static async update(req: Request, res: Response) {
         try {
-            const mess = await messService.updateMess(req.params.id, req.body);
+            const messData = req.body;
+
+            // If menu is sent as a string, parse it
+            if (typeof messData.menu === 'string') {
+                try {
+                    messData.menu = JSON.parse(messData.menu);
+                } catch (e) {
+                    // Ignore or handle parse error
+                }
+            }
+
+            if (req.file) {
+                messData.logo = {
+                    url: (req.file as any).path,
+                    public_id: (req.file as any).filename
+                };
+            }
+
+            const mess = await messService.updateMess(req.params.id, messData);
             if (!mess) return res.status(404).json({ error: 'Mess not found' });
             res.json(mess);
         } catch (error) {
