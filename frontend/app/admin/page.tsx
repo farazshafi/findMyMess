@@ -34,6 +34,7 @@ const EMPTY_MEAL_PLAN: IMealPlan = {
 function AdminContent() {
     const [messes, setMesses] = useState<any[]>([]);
     const [showForm, setShowForm] = useState(false);
+    const [editingId, setEditingId] = useState<string | null>(null);
 
     // Form State
     const [formData, setFormData] = useState({
@@ -97,14 +98,18 @@ function AdminContent() {
                 formDataToSend.append('menu', JSON.stringify(weeklyMenu));
             }
 
-            const res = await fetch(`${API_BASE_URL}/messes`, {
-                method: 'POST',
+            const url = editingId ? `${API_BASE_URL}/messes/${editingId}` : `${API_BASE_URL}/messes`;
+            const method = editingId ? 'PUT' : 'POST';
+
+            const res = await fetch(url, {
+                method: method,
                 body: formDataToSend
             });
 
             if (res.ok) {
-                alert('Mess added successfully!');
+                alert(editingId ? 'Mess updated successfully!' : 'Mess added successfully!');
                 setShowForm(false);
+                setEditingId(null);
                 loadMesses();
                 // Reset form
                 setFormData({
@@ -128,7 +133,7 @@ function AdminContent() {
                 });
                 setActiveDay('monday');
             } else {
-                alert('Failed to add mess. Please check the form.');
+                alert(`Failed to ${editingId ? 'update' : 'add'} mess. Please check the form.`);
             }
         } catch (err) {
             alert('Error submitting form');
@@ -165,18 +170,83 @@ function AdminContent() {
         }));
     };
 
+    const handleEdit = (mess: any) => {
+        setEditingId(mess._id);
+        setFormData({
+            name: mess.name,
+            area: mess.area,
+            priceRange: mess.priceRange,
+            phone: mess.phone,
+            whatsappLink: mess.whatsappLink || '',
+            isMenuAvailable: mess.isMenuAvailable,
+            logo: null
+        });
+        setLogoPreview(mess.logo?.url || null);
+        if (mess.menu) {
+            // Merge existing menu with EMPTY_MEAL_PLAN to handle missing days/meals
+            const updatedMenu = { ...weeklyMenu };
+            DAYS.forEach(day => {
+                if (mess.menu[day]) {
+                    updatedMenu[day] = {
+                        breakfast: { ...EMPTY_MEAL_PLAN.breakfast, ...mess.menu[day].breakfast },
+                        lunch: { ...EMPTY_MEAL_PLAN.lunch, ...mess.menu[day].lunch },
+                        dinner: { ...EMPTY_MEAL_PLAN.dinner, ...mess.menu[day].dinner }
+                    };
+                } else {
+                    updatedMenu[day] = { ...EMPTY_MEAL_PLAN };
+                }
+            });
+            setWeeklyMenu(updatedMenu);
+        } else {
+            setWeeklyMenu({
+                monday: { ...EMPTY_MEAL_PLAN },
+                tuesday: { ...EMPTY_MEAL_PLAN },
+                wednesday: { ...EMPTY_MEAL_PLAN },
+                thursday: { ...EMPTY_MEAL_PLAN },
+                friday: { ...EMPTY_MEAL_PLAN },
+                saturday: { ...EMPTY_MEAL_PLAN },
+                sunday: { ...EMPTY_MEAL_PLAN }
+            });
+        }
+        setShowForm(true);
+    };
+
     return (
         <div className="min-h-screen p-8 sm:p-20">
             <div className="flex justify-between items-center mb-8">
-                <h1 className="text-3xl font-bold text-primary dark:text-light">Admin Dashboard</h1>
-                <Button onClick={() => setShowForm(!showForm)}>
+                <h1 className="text-3xl font-bold text-primary dark:text-foreground">Admin Dashboard</h1>
+                <Button onClick={() => {
+                    if (showForm) {
+                        setEditingId(null);
+                        setFormData({
+                            name: '',
+                            area: '',
+                            priceRange: '',
+                            phone: '',
+                            whatsappLink: '',
+                            isMenuAvailable: false,
+                            logo: null
+                        });
+                        setLogoPreview(null);
+                        setWeeklyMenu({
+                            monday: { ...EMPTY_MEAL_PLAN },
+                            tuesday: { ...EMPTY_MEAL_PLAN },
+                            wednesday: { ...EMPTY_MEAL_PLAN },
+                            thursday: { ...EMPTY_MEAL_PLAN },
+                            friday: { ...EMPTY_MEAL_PLAN },
+                            saturday: { ...EMPTY_MEAL_PLAN },
+                            sunday: { ...EMPTY_MEAL_PLAN }
+                        });
+                    }
+                    setShowForm(!showForm);
+                }}>
                     {showForm ? 'Cancel' : 'Add New Mess'}
                 </Button>
             </div>
 
             {showForm && (
                 <Card className="mb-8 max-w-4xl mx-auto">
-                    <CardHeader><h2 className="text-xl font-bold">Add New Mess</h2></CardHeader>
+                    <CardHeader><h2 className="text-xl font-bold">{editingId ? 'Edit Mess' : 'Add New Mess'}</h2></CardHeader>
                     <CardContent>
                         <form onSubmit={handleSubmit} className="space-y-4">
                             <Input className='text-light placeholder:text-light/50' placeholder="Mess Name" value={formData.name} onChange={(e) => handleChange(e, 'name')} required />
@@ -205,7 +275,7 @@ function AdminContent() {
                                         accept="image/*"
                                         onChange={(e) => handleChange(e, 'logo')}
                                         className="text-sm text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-accent file:text-white hover:file:bg-accent/80 cursor-pointer"
-                                        required
+                                        required={!editingId}
                                     />
                                 </div>
                             </div>
@@ -303,7 +373,9 @@ function AdminContent() {
                                 </div>
                             )}
 
-                            <Button type="submit" className="w-full text-lg py-6 mt-4">Create Mess</Button>
+                            <Button type="submit" className="w-full text-lg py-6 mt-4">
+                                {editingId ? 'Update Mess' : 'Create Mess'}
+                            </Button>
                         </form>
                     </CardContent>
                 </Card>
@@ -335,7 +407,7 @@ function AdminContent() {
                             </div>
                         </div>
                         <div className="flex gap-2 mt-4 sm:mt-0">
-                            <Button variant="outline" size="sm" onClick={() => alert('Edit feature coming soon')}>Edit</Button>
+                            <Button className='bg-foreground hover:bg-foreground/50 text-white' variant="outline" size="sm" onClick={() => handleEdit(mess)}>Edit</Button>
                             <Button variant="secondary" size="sm" className="bg-red-500 hover:bg-red-600 text-white" onClick={() => handleDelete(mess._id)}>Delete</Button>
                         </div>
                     </Card>
