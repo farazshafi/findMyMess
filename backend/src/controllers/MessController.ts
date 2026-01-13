@@ -1,8 +1,6 @@
 import { Request, Response } from 'express';
 import { MessService } from '../services/MessService';
 import { MessRepository } from '../repositories/MessRepository';
-import fs from 'fs';
-import path from 'path';
 
 const messRepository = new MessRepository();
 const messService = new MessService(messRepository);
@@ -12,11 +10,12 @@ export class MessController {
     static async getAll(req: Request, res: Response) {
         try {
             const { area } = req.query;
+            const status = (req.query.status as string) || 'APPROVED';
             let messes;
             if (area && typeof area === 'string') {
-                messes = await messService.searchMessesByArea(area);
+                messes = await messService.searchMessesByArea(area, status);
             } else {
-                messes = await messService.getAllMesses();
+                messes = await messService.getAllMesses(status);
             }
             res.json(messes);
         } catch (error) {
@@ -47,6 +46,13 @@ export class MessController {
                 }
             }
 
+            // Robust parsing for FormData fields
+            if (messData.isMenuAvailable === 'true') {
+                messData.isMenuAvailable = true;
+            } else if (messData.isMenuAvailable === 'false') {
+                messData.isMenuAvailable = false;
+            }
+
             if (req.file) {
                 messData.logo = {
                     url: (req.file as any).path,
@@ -54,13 +60,18 @@ export class MessController {
                 };
             }
 
+            const adminKey = req.headers['x-admin-key'];
+            const isAdmin = adminKey && adminKey === process.env.ADMIN_KEY;
+
+            messData.status = isAdmin ? 'APPROVED' : 'PENDING';
+
             const mess = await messService.createMess(messData);
             res.status(201).json(mess);
-        } catch (error) {
+        } catch (error: any) {
             console.error('Error creating mess:', error);
             res.status(400).json({
                 error: 'Failed to create mess',
-                details: JSON.parse(JSON.stringify(error, Object.getOwnPropertyNames(error)))
+                details: error.message
             });
         }
     }
@@ -68,6 +79,13 @@ export class MessController {
     static async update(req: Request, res: Response) {
         try {
             const messData = req.body;
+
+            // Robust parsing for FormData fields
+            if (messData.isMenuAvailable === 'true') {
+                messData.isMenuAvailable = true;
+            } else if (messData.isMenuAvailable === 'false') {
+                messData.isMenuAvailable = false;
+            }
 
             // If menu is sent as a string, parse it
             if (typeof messData.menu === 'string') {
@@ -100,6 +118,29 @@ export class MessController {
             res.status(204).send();
         } catch (error) {
             res.status(500).json({ error: 'Failed to delete mess' });
+        }
+    }
+
+    static async getPending(req: Request, res: Response) {
+        try {
+            const messes = await messService.getPendingMesses();
+            res.json(messes);
+        } catch (error) {
+            res.status(500).json({ error: 'Failed to fetch pending messes' });
+        }
+    }
+
+    static async updateStatus(req: Request, res: Response) {
+        try {
+            const { status } = req.body;
+            if (!['APPROVED', 'REJECTED'].includes(status)) {
+                return res.status(400).json({ error: 'Invalid status' });
+            }
+            const mess = await messService.updateMessStatus(req.params.id, status);
+            if (!mess) return res.status(404).json({ error: 'Mess not found' });
+            res.json(mess);
+        } catch (error) {
+            res.status(400).json({ error: 'Failed to update status' });
         }
     }
 }

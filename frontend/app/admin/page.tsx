@@ -1,427 +1,509 @@
 'use client';
 
-import { Suspense } from 'react';
-import { useState, useEffect } from 'react';
-import { fetchMesses } from '../../lib/api';
+import React, { useState, useEffect } from 'react';
+import { fetchPendingMesses, updateMessStatus, deleteMess, createMess, fetchAllMesses, updateMess } from '../../lib/api';
 import { Button } from '../../components/ui/Button';
+import { Card, CardContent } from '../../components/ui/Card';
 import { Input } from '../../components/ui/Input';
-import { Card, CardContent, CardHeader } from '../../components/ui/Card';
 import { AvatarFallback } from '../../components/AvatarFallback';
+import { MessForm } from '../../components/MessForm';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+type Tab = 'submissions' | 'all-messes';
 
-interface IMenu {
-    item: string;
-    description: string;
-}
-
-interface IMealPlan {
-    breakfast: IMenu;
-    lunch: IMenu;
-    dinner: IMenu;
-}
-
-type DayOfWeek = 'monday' | 'tuesday' | 'wednesday' | 'thursday' | 'friday' | 'saturday' | 'sunday';
-
-const DAYS: DayOfWeek[] = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
-
-const EMPTY_MEAL_PLAN: IMealPlan = {
-    breakfast: { item: '', description: '' },
-    lunch: { item: '', description: '' },
-    dinner: { item: '', description: '' }
-};
-
-function AdminContent() {
+export default function AdminDashboard() {
+    const [adminKey, setAdminKey] = useState('');
+    const [isAuthenticated, setIsAuthenticated] = useState(false);
     const [messes, setMesses] = useState<any[]>([]);
-    const [showForm, setShowForm] = useState(false);
-    const [editingId, setEditingId] = useState<string | null>(null);
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const [selectedMess, setSelectedMess] = useState<any | null>(null);
+    const [editMess, setEditMess] = useState<any | null>(null);
+    const [activeMenuDay, setActiveMenuDay] = useState('monday');
+    const [showAddForm, setShowAddForm] = useState(false);
+    const [activeTab, setActiveTab] = useState<Tab>('submissions');
+    const [searchQuery, setSearchQuery] = useState('');
 
-    // Form State
-    const [formData, setFormData] = useState({
-        name: '',
-        area: '',
-        priceRange: '',
-        phone: '',
-        whatsappLink: '',
-        isMenuAvailable: false,
-        logo: null as File | null
-    });
-    const [logoPreview, setLogoPreview] = useState<string | null>(null);
+    const handleLogin = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (adminKey) {
+            setIsAuthenticated(true);
+            loadData('submissions');
+        }
+    };
 
-    const [weeklyMenu, setWeeklyMenu] = useState<Record<DayOfWeek, IMealPlan>>({
-        monday: { ...EMPTY_MEAL_PLAN },
-        tuesday: { ...EMPTY_MEAL_PLAN },
-        wednesday: { ...EMPTY_MEAL_PLAN },
-        thursday: { ...EMPTY_MEAL_PLAN },
-        friday: { ...EMPTY_MEAL_PLAN },
-        saturday: { ...EMPTY_MEAL_PLAN },
-        sunday: { ...EMPTY_MEAL_PLAN }
-    });
-
-    const [activeDay, setActiveDay] = useState<DayOfWeek>('monday');
+    const loadData = async (tab: Tab) => {
+        setLoading(true);
+        setError(null);
+        try {
+            let data;
+            if (tab === 'submissions') {
+                data = await fetchPendingMesses(adminKey);
+            } else {
+                data = await fetchAllMesses(undefined, adminKey);
+            }
+            setMesses(data);
+        } catch (err: any) {
+            setError(err.message || 'Authentication failed');
+            setIsAuthenticated(false);
+        } finally {
+            setLoading(false);
+        }
+    };
 
     useEffect(() => {
-        loadMesses();
-    }, []);
+        if (isAuthenticated) {
+            loadData(activeTab);
+        }
+    }, [activeTab, isAuthenticated]);
 
-    async function loadMesses() {
-        const data = await fetchMesses();
-        setMesses(data);
-    }
-
-    async function handleDelete(id: string) {
-        if (!confirm('Are you sure you want to delete this mess?')) return;
+    const handleAddMess = async (formData: FormData) => {
         try {
-            await fetch(`${API_BASE_URL}/messes/${id}`, { method: 'DELETE' });
-            loadMesses();
-        } catch (err) {
-            alert('Failed to delete');
+            await createMess(formData, adminKey);
+            setShowAddForm(false);
+            alert('Mess created and published successfully!');
+            loadData(activeTab);
+        } catch (err: any) {
+            alert(err.message || 'Failed to create mess');
         }
-    }
+    };
 
-    async function handleSubmit(e: React.FormEvent) {
-        e.preventDefault();
+    const handleUpdateMess = async (formData: FormData) => {
+        if (!editMess) return;
         try {
-            const formDataToSend = new FormData();
-            formDataToSend.append('name', formData.name);
-            formDataToSend.append('area', formData.area);
-            formDataToSend.append('priceRange', formData.priceRange);
-            formDataToSend.append('phone', formData.phone);
-            formDataToSend.append('whatsappLink', formData.whatsappLink);
-            formDataToSend.append('isMenuAvailable', String(formData.isMenuAvailable));
+            await updateMess(editMess._id, formData, adminKey);
+            setEditMess(null);
+            alert('Mess updated successfully!');
+            loadData(activeTab);
+        } catch (err: any) {
+            alert(err.message || 'Failed to update mess');
+        }
+    };
 
-            if (formData.logo) {
-                formDataToSend.append('logo', formData.logo);
-            }
-
-            if (formData.isMenuAvailable) {
-                formDataToSend.append('menu', JSON.stringify(weeklyMenu));
-            }
-
-            const url = editingId ? `${API_BASE_URL}/messes/${editingId}` : `${API_BASE_URL}/messes`;
-            const method = editingId ? 'PUT' : 'POST';
-
-            const res = await fetch(url, {
-                method: method,
-                body: formDataToSend
-            });
-
-            if (res.ok) {
-                alert(editingId ? 'Mess updated successfully!' : 'Mess added successfully!');
-                setShowForm(false);
-                setEditingId(null);
-                loadMesses();
-                // Reset form
-                setFormData({
-                    name: '',
-                    area: '',
-                    priceRange: '',
-                    phone: '',
-                    whatsappLink: '',
-                    isMenuAvailable: false,
-                    logo: null
-                });
-                setLogoPreview(null);
-                setWeeklyMenu({
-                    monday: { ...EMPTY_MEAL_PLAN },
-                    tuesday: { ...EMPTY_MEAL_PLAN },
-                    wednesday: { ...EMPTY_MEAL_PLAN },
-                    thursday: { ...EMPTY_MEAL_PLAN },
-                    friday: { ...EMPTY_MEAL_PLAN },
-                    saturday: { ...EMPTY_MEAL_PLAN },
-                    sunday: { ...EMPTY_MEAL_PLAN }
-                });
-                setActiveDay('monday');
+    const handleAction = async (id: string, action: 'APPROVED' | 'REJECTED' | 'DELETE') => {
+        try {
+            if (action === 'DELETE') {
+                if (confirm('Are you sure you want to delete this mess?')) {
+                    await deleteMess(id, adminKey);
+                } else return;
             } else {
-                alert(`Failed to ${editingId ? 'update' : 'add'} mess. Please check the form.`);
+                await updateMessStatus(id, action, adminKey);
             }
-        } catch (err) {
-            alert('Error submitting form');
-        }
-    }
-
-    const handleChange = (e: React.ChangeEvent<HTMLInputElement>, field: string) => {
-        if (e.target.type === 'file') {
-            const file = e.target.files?.[0] || null;
-            setFormData({ ...formData, [field]: file });
-            if (file) {
-                const reader = new FileReader();
-                reader.onloadend = () => setLogoPreview(reader.result as string);
-                reader.readAsDataURL(file);
-            } else {
-                setLogoPreview(null);
-            }
-        } else {
-            const value = e.target.type === 'checkbox' ? e.target.checked : e.target.value;
-            setFormData({ ...formData, [field]: value });
+            setMesses(messes.filter(m => m._id !== id));
+            if (selectedMess?._id === id) setSelectedMess(null);
+        } catch (err: any) {
+            alert(err.message || 'Action failed');
         }
     };
 
-    const handleMenuChange = (e: React.ChangeEvent<HTMLInputElement>, mealType: 'breakfast' | 'lunch' | 'dinner', field: 'item' | 'description') => {
-        setWeeklyMenu(prev => ({
-            ...prev,
-            [activeDay]: {
-                ...prev[activeDay],
-                [mealType]: {
-                    ...prev[activeDay][mealType],
-                    [field]: e.target.value
-                }
-            }
-        }));
-    };
+    const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
-    const handleEdit = (mess: any) => {
-        setEditingId(mess._id);
-        setFormData({
-            name: mess.name,
-            area: mess.area,
-            priceRange: mess.priceRange,
-            phone: mess.phone,
-            whatsappLink: mess.whatsappLink || '',
-            isMenuAvailable: mess.isMenuAvailable,
-            logo: null
-        });
-        setLogoPreview(mess.logo?.url || null);
-        if (mess.menu) {
-            // Merge existing menu with EMPTY_MEAL_PLAN to handle missing days/meals
-            const updatedMenu = { ...weeklyMenu };
-            DAYS.forEach(day => {
-                if (mess.menu[day]) {
-                    updatedMenu[day] = {
-                        breakfast: { ...EMPTY_MEAL_PLAN.breakfast, ...mess.menu[day].breakfast },
-                        lunch: { ...EMPTY_MEAL_PLAN.lunch, ...mess.menu[day].lunch },
-                        dinner: { ...EMPTY_MEAL_PLAN.dinner, ...mess.menu[day].dinner }
-                    };
-                } else {
-                    updatedMenu[day] = { ...EMPTY_MEAL_PLAN };
-                }
-            });
-            setWeeklyMenu(updatedMenu);
-        } else {
-            setWeeklyMenu({
-                monday: { ...EMPTY_MEAL_PLAN },
-                tuesday: { ...EMPTY_MEAL_PLAN },
-                wednesday: { ...EMPTY_MEAL_PLAN },
-                thursday: { ...EMPTY_MEAL_PLAN },
-                friday: { ...EMPTY_MEAL_PLAN },
-                saturday: { ...EMPTY_MEAL_PLAN },
-                sunday: { ...EMPTY_MEAL_PLAN }
-            });
-        }
-        setShowForm(true);
-    };
-
-    return (
-        <div className="min-h-screen p-8 sm:p-20">
-            <div className="flex justify-between items-center mb-8">
-                <h1 className="text-3xl font-bold text-primary dark:text-foreground">Admin Dashboard</h1>
-                <Button onClick={() => {
-                    if (showForm) {
-                        setEditingId(null);
-                        setFormData({
-                            name: '',
-                            area: '',
-                            priceRange: '',
-                            phone: '',
-                            whatsappLink: '',
-                            isMenuAvailable: false,
-                            logo: null
-                        });
-                        setLogoPreview(null);
-                        setWeeklyMenu({
-                            monday: { ...EMPTY_MEAL_PLAN },
-                            tuesday: { ...EMPTY_MEAL_PLAN },
-                            wednesday: { ...EMPTY_MEAL_PLAN },
-                            thursday: { ...EMPTY_MEAL_PLAN },
-                            friday: { ...EMPTY_MEAL_PLAN },
-                            saturday: { ...EMPTY_MEAL_PLAN },
-                            sunday: { ...EMPTY_MEAL_PLAN }
-                        });
-                    }
-                    setShowForm(!showForm);
-                }}>
-                    {showForm ? 'Cancel' : 'Add New Mess'}
-                </Button>
-            </div>
-
-            {showForm && (
-                <Card className="mb-8 max-w-4xl mx-auto">
-                    <CardHeader><h2 className="text-xl font-bold">{editingId ? 'Edit Mess' : 'Add New Mess'}</h2></CardHeader>
-                    <CardContent>
-                        <form onSubmit={handleSubmit} className="space-y-4">
-                            <Input className='text-light placeholder:text-light/50' placeholder="Mess Name" value={formData.name} onChange={(e) => handleChange(e, 'name')} required />
-                            <div className="grid grid-cols-2 gap-4">
-                                <Input className='text-light placeholder:text-light/50' placeholder="Area" value={formData.area} onChange={(e) => handleChange(e, 'area')} required />
-                                <Input className='text-light placeholder:text-light/50' placeholder="Price Range (e.g. 3000-4000)" value={formData.priceRange} onChange={(e) => handleChange(e, 'priceRange')} required />
-                            </div>
-                            <div className="grid grid-cols-2 gap-4">
-                                <Input className='text-light placeholder:text-light/50' placeholder="Phone" value={formData.phone} onChange={(e) => handleChange(e, 'phone')} required />
-                                <Input className='text-light placeholder:text-light/50' placeholder="WhatsApp Link (Optional)" value={formData.whatsappLink} onChange={(e) => handleChange(e, 'whatsappLink')} />
-                            </div>
-
-                            {/* Logo Upload */}
-                            <div className="space-y-2 border p-4 rounded-lg">
-                                <label className="block text-sm font-medium mb-1">Mess Logo (Needed)</label>
-                                <div className="flex items-center gap-4">
-                                    <div className="w-20 h-20 rounded-lg overflow-hidden bg-white/10 flex items-center justify-center border-2 border-dashed border-white/20">
-                                        {logoPreview ? (
-                                            <img src={logoPreview} alt="Logo preview" className="w-full h-full object-cover" />
-                                        ) : (
-                                            <span className="text-xs text-white/40">No Logo</span>
-                                        )}
-                                    </div>
-                                    <input
-                                        type="file"
-                                        accept="image/*"
-                                        onChange={(e) => handleChange(e, 'logo')}
-                                        className="text-sm text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-accent file:text-white hover:file:bg-accent/80 cursor-pointer"
-                                        required={!editingId}
-                                    />
-                                </div>
-                            </div>
-
-                            {/* Menu Availability Toggle */}
-                            <div className="flex items-center gap-2 border p-4 rounded-lg">
-                                <input
-                                    type="checkbox"
-                                    id="isMenuAvailable"
-                                    checked={formData.isMenuAvailable}
-                                    onChange={(e) => handleChange(e, 'isMenuAvailable')}
-                                    className="w-5 h-5 accent-accent"
-                                />
-                                <label htmlFor="isMenuAvailable" className="font-semibold cursor-pointer select-none">Menu Available</label>
-                            </div>
-
-                            {/* Weekly Menu Editor */}
-                            {formData.isMenuAvailable && (
-                                <div className="space-y-4 border p-4 rounded-lg">
-                                    <h3 className="font-semibold text-lg">Weekly Menu</h3>
-
-                                    {/* Day Tabs */}
-                                    <div className="flex flex-wrap gap-2 overflow-x-auto pb-2">
-                                        {DAYS.map(day => (
-                                            <button
-                                                key={day}
-                                                type="button"
-                                                onClick={() => setActiveDay(day)}
-                                                className={`px-4 py-2 rounded-full text-sm font-medium capitalize transition-colors ${activeDay === day
-                                                    ? 'bg-accent text-white'
-                                                    : 'bg-white/10 hover:bg-white/20'
-                                                    }`}
-                                            >
-                                                {day}
-                                            </button>
-                                        ))}
-                                    </div>
-
-                                    {/* Menu Inputs for Active Day */}
-                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-white/5 p-4 rounded-lg animate-in fade-in slide-in-from-top-2">
-                                        {/* Breakfast */}
-                                        <div className="space-y-2">
-                                            <span className="text-sm font-bold text-accent">Breakfast</span>
-                                            <Input
-                                                className='text-light placeholder:text-light/50'
-                                                placeholder="Item Name"
-                                                value={weeklyMenu[activeDay].breakfast.item}
-                                                onChange={(e) => handleMenuChange(e, 'breakfast', 'item')}
-                                            />
-                                            <Input
-                                                className='text-light placeholder:text-light/50 text-sm'
-                                                placeholder="Description (Optional)"
-                                                value={weeklyMenu[activeDay].breakfast.description}
-                                                onChange={(e) => handleMenuChange(e, 'breakfast', 'description')}
-                                            />
-                                        </div>
-
-                                        {/* Lunch */}
-                                        <div className="space-y-2">
-                                            <span className="text-sm font-bold text-accent">Lunch</span>
-                                            <Input
-                                                className='text-light placeholder:text-light/50'
-                                                placeholder="Item Name"
-                                                value={weeklyMenu[activeDay].lunch.item}
-                                                onChange={(e) => handleMenuChange(e, 'lunch', 'item')}
-                                            />
-                                            <Input
-                                                className='text-light placeholder:text-light/50 text-sm'
-                                                placeholder="Description (Optional)"
-                                                value={weeklyMenu[activeDay].lunch.description}
-                                                onChange={(e) => handleMenuChange(e, 'lunch', 'description')}
-                                            />
-                                        </div>
-
-                                        {/* Dinner */}
-                                        <div className="space-y-2">
-                                            <span className="text-sm font-bold text-accent">Dinner</span>
-                                            <Input
-                                                className='text-light placeholder:text-light/50'
-                                                placeholder="Item Name"
-                                                value={weeklyMenu[activeDay].dinner.item}
-                                                onChange={(e) => handleMenuChange(e, 'dinner', 'item')}
-                                            />
-                                            <Input
-                                                className='text-light placeholder:text-light/50 text-sm'
-                                                placeholder="Description (Optional)"
-                                                value={weeklyMenu[activeDay].dinner.description}
-                                                onChange={(e) => handleMenuChange(e, 'dinner', 'description')}
-                                            />
-                                        </div>
-                                    </div>
-                                    <p className="text-xs text-center text-gray-500 mt-2">
-                                        Editing Menu for <span className="capitalize font-bold text-accent">{activeDay}</span>
-                                    </p>
-                                </div>
-                            )}
-
-                            <Button type="submit" className="w-full text-lg py-6 mt-4">
-                                {editingId ? 'Update Mess' : 'Create Mess'}
+    if (!isAuthenticated) {
+        return (
+            <div className="min-h-screen flex items-center justify-center bg-background p-4">
+                <Card className="max-w-md w-full border-foreground/10 shadow-2xl">
+                    <CardContent className="p-8">
+                        <div className="text-center mb-8">
+                            <h1 className="text-3xl font-black text-primary">Admin Access</h1>
+                            <p className="text-foreground/40 text-sm mt-2">Enter your secret key to continue</p>
+                        </div>
+                        <form onSubmit={handleLogin} className="space-y-6">
+                            <Input
+                                label="Admin Secret Key"
+                                type="password"
+                                value={adminKey}
+                                onChange={(e) => setAdminKey(e.target.value)}
+                                placeholder="••••••••"
+                                required
+                                className="bg-foreground/5"
+                            />
+                            <Button type="submit" className="w-full h-12 shadow-xl shadow-primary/20 font-bold">
+                                Authentication
                             </Button>
                         </form>
                     </CardContent>
                 </Card>
+            </div>
+        );
+    }
+
+    const filteredMesses = messes.filter((m: any) =>
+        m.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        m.area.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+
+    const NavItem = ({ tab, icon, label }: { tab: Tab, icon: string, label: string }) => (
+        <button
+            onClick={() => {
+                setActiveTab(tab);
+                setIsMobileMenuOpen(false);
+            }}
+            className={`w-full flex items-center gap-4 px-4 py-3 rounded-2xl transition-all duration-300 group ${activeTab === tab
+                    ? 'bg-primary text-white shadow-lg shadow-primary/20'
+                    : 'hover:bg-foreground/5 text-foreground/50'
+                }`}
+        >
+            <span className="text-xl group-hover:scale-120 transition-transform">{icon}</span>
+            <span className="font-bold text-sm lg:opacity-100 transition-opacity whitespace-nowrap overflow-hidden">
+                {label}
+            </span>
+        </button>
+    );
+
+    return (
+        <div className="min-h-screen bg-background flex flex-col md:flex-row text-foreground overflow-hidden">
+            {/* Mobile Header */}
+            <div className="md:hidden flex items-center justify-between p-4 border-b border-foreground/10 bg-background/50 backdrop-blur-md sticky top-0 z-50">
+                <h2 className="text-xl font-black text-primary">findMyMess</h2>
+                <button
+                    onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+                    className="p-2 bg-foreground/5 rounded-xl text-2xl"
+                >
+                    {isMobileMenuOpen ? '✕' : '☰'}
+                </button>
+            </div>
+
+            {/* Sidebar */}
+            <aside className={`
+                fixed inset-y-0 left-0 z-40 w-64 bg-background border-r border-foreground/10 flex flex-col transition-transform duration-300 ease-in-out md:relative md:translate-x-0
+                ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}
+                lg:w-20 lg:hover:w-64 group/sidebar
+            `}>
+                <div className="p-6 h-20 flex items-center lg:justify-center lg:group-hover/sidebar:justify-start overflow-hidden">
+                    <h2 className="text-xl font-black text-primary whitespace-nowrap">f<span className="lg:hidden lg:group-hover/sidebar:inline">indMyMess</span></h2>
+                </div>
+
+                <nav className="flex-1 p-4 space-y-3">
+                    <NavItem tab="submissions" icon="📨" label="Submissions" />
+                    <NavItem tab="all-messes" icon="🏢" label="All Messes" />
+                </nav>
+
+                <div className="p-4 border-t border-foreground/10">
+                    <button
+                        onClick={() => setIsAuthenticated(false)}
+                        className="w-full flex items-center gap-4 px-4 py-3 rounded-2xl border border-red-500/20 text-red-500 hover:bg-red-500 hover:text-white transition-all font-bold overflow-hidden"
+                    >
+                        <span className="text-xl">🚪</span>
+                        <span className="text-sm lg:hidden lg:group-hover/sidebar:inline">Logout</span>
+                    </button>
+                </div>
+            </aside>
+
+            {/* Backdrop for mobile */}
+            {isMobileMenuOpen && (
+                <div
+                    className="fixed inset-0 bg-black/50 backdrop-blur-sm z-30 md:hidden"
+                    onClick={() => setIsMobileMenuOpen(false)}
+                />
             )}
 
-            <div className="grid grid-cols-1 gap-4">
-                {messes.map((mess) => (
-                    <Card key={mess._id} className="flex flex-col sm:flex-row justify-between items-center p-4 gap-4">
-                        <div className="flex items-center gap-4 w-full">
-                            <div className="w-16 h-16 rounded-lg overflow-hidden bg-white/10 shrink-0 border border-white/20">
-                                {mess.logo ? (
-                                    <img src={mess.logo.url} alt={mess.name} className="w-full h-full object-cover" />
-                                ) : (
-                                    <AvatarFallback name={mess.name} size="md" />
-                                )}
-                            </div>
-                            <div className="grow">
-                                <h3 className="text-xl font-bold">{mess.name}</h3>
-                                <p className="text-sm text-gray-500">{mess.area} - {mess.priceRange}</p>
-                                {mess.isMenuAvailable ? (
-                                    <span className="inline-block mt-1 px-2 py-0.5 rounded text-xs bg-green-500/20 text-green-500 border border-green-500/30">
-                                        Menu Available
-                                    </span>
-                                ) : (
-                                    <span className="inline-block mt-1 px-2 py-0.5 rounded text-xs bg-red-500/20 text-red-500 border border-red-500/30">
-                                        No Menu
-                                    </span>
-                                )}
-                            </div>
+            {/* Main Content */}
+            <main className="flex-1 overflow-y-auto bg-foreground/2">
+                <header className="p-8 border-b border-foreground/10 bg-background/50 backdrop-blur-md sticky top-0 z-40">
+                    <div className="max-w-5xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
+                        <div>
+                            <h1 className="text-3xl font-bold capitalize">{activeTab.replace('-', ' ')}</h1>
+                            <p className="text-foreground/50 text-sm mt-1">
+                                {activeTab === 'submissions' ? 'Manage pending mess requests' : 'Manage all listings in the system'}
+                            </p>
                         </div>
-                        <div className="flex gap-2 mt-4 sm:mt-0">
-                            <Button className='bg-foreground hover:bg-foreground/50 text-white' variant="outline" size="sm" onClick={() => handleEdit(mess)}>Edit</Button>
-                            <Button variant="secondary" size="sm" className="bg-red-500 hover:bg-red-600 text-white" onClick={() => handleDelete(mess._id)}>Delete</Button>
+                        <div className="flex gap-4 w-full md:w-auto">
+                            <div className="relative grow md:w-64">
+                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-foreground/30">🔍</span>
+                                <input
+                                    type="text"
+                                    placeholder="Search..."
+                                    className="w-full pl-10 pr-4 py-2 bg-foreground/5 border-none rounded-xl text-sm focus:ring-2 focus:ring-primary/20 transition-all"
+                                    value={searchQuery}
+                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                />
+                            </div>
+                            <Button
+                                className="bg-primary text-white shrink-0"
+                                onClick={() => setShowAddForm(true)}
+                            >
+                                + New Mess
+                            </Button>
                         </div>
-                    </Card>
-                ))}
-                {messes.length === 0 && !showForm && <p className="text-center text-gray-500">No messes found.</p>}
-            </div>
-        </div>
-    );
-}
+                    </div>
+                </header>
 
-export default function AdminPage() {
-    return (
-        <Suspense fallback={<div className="min-h-screen flex items-center justify-center">Loading...</div>}>
-            <AdminContent />
-        </Suspense>
+                <div className="p-8 max-w-5xl mx-auto">
+                    {loading ? (
+                        <div className="text-center py-24">
+                            <div className="animate-spin text-primary text-4xl mb-4">🌀</div>
+                            <p className="text-foreground/40">Loading data...</p>
+                        </div>
+                    ) : filteredMesses.length === 0 ? (
+                        <div className="text-center py-24 bg-background rounded-3xl border-2 border-dashed border-foreground/10">
+                            <p className="text-foreground/40 text-lg">No records found matching your criteria.</p>
+                        </div>
+                    ) : (
+                        <div className="grid gap-4">
+                            {filteredMesses.map((mess: any) => (
+                                <Card key={mess._id} className="overflow-hidden hover:shadow-xl transition-all border-foreground/5 group">
+                                    <CardContent className="p-0">
+                                        <div className="flex flex-col md:flex-row items-center p-5 gap-6">
+                                            <div className="w-20 h-20 rounded-2xl bg-foreground/5 shrink-0 overflow-hidden relative shadow-inner">
+                                                {mess.logo ? (
+                                                    <img src={mess.logo.url} alt={mess.name} className="w-full h-full object-cover" />
+                                                ) : (
+                                                    <AvatarFallback name={mess.name} size="xl" />
+                                                )}
+                                            </div>
+                                            <div className="grow text-center md:text-left">
+                                                <div className="flex flex-wrap items-center gap-3">
+                                                    <h3 className="text-xl font-bold">{mess.name}</h3>
+                                                    <span className={`text-[10px] uppercase tracking-widest font-bold px-2 py-0.5 rounded-full ${mess.status === 'APPROVED' ? 'bg-green-500/10 text-green-500' :
+                                                        mess.status === 'PENDING' ? 'bg-yellow-500/10 text-yellow-500' :
+                                                            'bg-red-500/10 text-red-500'
+                                                        }`}>
+                                                        {mess.status}
+                                                    </span>
+                                                </div>
+                                                <p className="text-foreground/50 text-sm">📍 {mess.area}</p>
+                                            </div>
+                                            <div className="flex flex-wrap gap-2 w-full md:w-auto justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                                                <button
+                                                    className="p-2.5 rounded-xl bg-accent/10 text-accent hover:bg-accent hover:text-white transition-all"
+                                                    title="View Details"
+                                                    onClick={() => setSelectedMess(mess)}
+                                                >
+                                                    👁️
+                                                </button>
+                                                <button
+                                                    className="p-2.5 rounded-xl bg-primary/10 text-primary hover:bg-primary hover:text-white transition-all"
+                                                    title="Edit Mess"
+                                                    onClick={() => setEditMess(mess)}
+                                                >
+                                                    ✏️
+                                                </button>
+                                                {activeTab === 'submissions' && (
+                                                    <button
+                                                        className="p-2.5 rounded-xl bg-green-500/10 text-green-500 hover:bg-green-500 hover:text-white transition-all"
+                                                        title="Approve"
+                                                        onClick={() => handleAction(mess._id, 'APPROVED')}
+                                                    >
+                                                        ✅
+                                                    </button>
+                                                )}
+                                                <button
+                                                    className="p-2.5 rounded-xl bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white transition-all"
+                                                    title="Delete"
+                                                    onClick={() => handleAction(mess._id, 'DELETE')}
+                                                >
+                                                    🗑️
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <div className="bg-foreground/2 px-6 py-3 border-t border-foreground/5 text-xs grid grid-cols-2 md:grid-cols-4 gap-4 text-foreground/40">
+                                            <div><span className="font-semibold text-foreground/60">Phone:</span> {mess.phone}</div>
+                                            <div><span className="font-semibold text-foreground/60">Price:</span> {mess.priceRange}</div>
+                                            <div className="col-span-2 text-right"><span className="font-semibold text-foreground/60">ID:</span> {mess._id}</div>
+                                        </div>
+                                    </CardContent>
+                                </Card>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            </main>
+
+            {/* Mess Details Modal */}
+            {selectedMess && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+                    <div className="bg-background w-full max-w-4xl max-h-[90vh] overflow-y-auto rounded-3xl shadow-2xl relative animate-in zoom-in-95 duration-200 border border-foreground/10">
+                        <button
+                            onClick={() => setSelectedMess(null)}
+                            className="absolute top-6 right-6 p-2 hover:bg-foreground/5 cursor-pointer rounded-full text-foreground transition-all z-10"
+                        >
+                            ✕
+                        </button>
+
+                        <div className="p-10">
+                            {/* Modal Header */}
+                            <div className="flex flex-col md:flex-row items-center md:items-start gap-8 mb-10 border-b border-foreground/10 pb-10">
+                                <div className="w-32 h-32 rounded-3xl overflow-hidden bg-foreground/5 shrink-0 border-4 border-background shadow-xl">
+                                    {selectedMess.logo ? (
+                                        <img src={selectedMess.logo.url} alt={selectedMess.name} className="w-full h-full object-cover" />
+                                    ) : (
+                                        <AvatarFallback name={selectedMess.name} size="xl" />
+                                    )}
+                                </div>
+                                <div className="grow text-center md:text-left">
+                                    <div className="flex flex-wrap items-center gap-4 justify-center md:justify-start mb-2">
+                                        <h2 className="text-4xl font-black text-primary">{selectedMess.name}</h2>
+                                        <span className="bg-primary/10 text-primary px-3 py-1 rounded-full text-xs font-bold uppercase tracking-widest">
+                                            {selectedMess.status}
+                                        </span>
+                                    </div>
+                                    <p className="text-xl text-foreground/50">📍 {selectedMess.area}</p>
+                                    <div className="mt-6 flex flex-wrap gap-4 justify-center md:justify-start">
+                                        <div className="bg-background px-4 py-2 rounded-2xl shadow-sm border border-foreground/5">
+                                            <p className="text-xs text-foreground/30 font-bold uppercase">Price Range</p>
+                                            <p className="font-black text-primary">₹ {selectedMess.priceRange}</p>
+                                        </div>
+                                        <div className="bg-background px-4 py-2 rounded-2xl shadow-sm border border-foreground/5">
+                                            <p className="text-xs text-foreground/30 font-bold uppercase">Contact</p>
+                                            <p className="font-black text-foreground/80">{selectedMess.phone}</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Modal Content */}
+                            <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
+                                <div className="lg:col-span-2 space-y-8">
+                                    <div className="flex items-center justify-between">
+                                        <h3 className="text-2xl font-bold">Weekly Menu</h3>
+                                        {!selectedMess.isMenuAvailable && (
+                                            <span className="text-xs bg-red-500/10 text-red-500 px-3 py-1 rounded-full font-bold">Unavailable</span>
+                                        )}
+                                    </div>
+
+                                    {selectedMess.isMenuAvailable && selectedMess.menu ? (
+                                        <div className="space-y-6">
+                                            <div className="flex gap-2 overflow-x-auto pb-4 scrollbar-hide">
+                                                {['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'].map(day => (
+                                                    <button
+                                                        key={day}
+                                                        onClick={() => setActiveMenuDay(day)}
+                                                        className={`px-5 py-2.5 rounded-2xl text-sm font-bold capitalize whitespace-nowrap transition-all ${activeMenuDay === day
+                                                            ? 'bg-primary text-white shadow-xl shadow-primary/20 scale-105'
+                                                            : 'bg-foreground/5 hover:bg-foreground/10 text-foreground/50'
+                                                            }`}
+                                                    >
+                                                        {day}
+                                                    </button>
+                                                ))}
+                                            </div>
+
+                                            <div className="bg-foreground/3 p-8 rounded-3xl space-y-8 border border-foreground/5">
+                                                {['breakfast', 'lunch', 'dinner'].map(meal => (
+                                                    <div key={meal} className="flex gap-6 items-start group">
+                                                        <div className="w-24 shrink-0">
+                                                            <div className="text-[10px] font-black uppercase text-primary/40 tracking-wider mb-1">{meal}</div>
+                                                            <div className="w-10 h-1 bg-primary/20 rounded-full group-hover:w-full transition-all duration-500"></div>
+                                                        </div>
+                                                        <div>
+                                                            <div className="font-bold text-xl text-foreground/80 mb-1">{selectedMess.menu[activeMenuDay]?.[meal]?.item || 'Not set'}</div>
+                                                            <div className="text-sm text-foreground/40 leading-relaxed font-medium">{selectedMess.menu[activeMenuDay]?.[meal]?.description || 'No description provided'}</div>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <div className="text-center py-20 bg-foreground/2 rounded-3xl text-foreground/30 italic font-medium border-2 border-dashed border-foreground/5">
+                                            Menu details haven't been provided for this mess.
+                                        </div>
+                                    )}
+                                </div>
+
+                                <div className="space-y-6">
+                                    <div className="bg-background p-8 rounded-3xl border border-foreground/10 shadow-xl flex flex-col gap-4">
+                                        <h3 className="font-black text-xs uppercase tracking-widest text-foreground/30">Action Center</h3>
+
+                                        {selectedMess.status !== 'APPROVED' && (
+                                            <Button
+                                                className="w-full h-12 bg-green-600 hover:bg-green-700 shadow-lg shadow-green-600/20 text-white font-bold"
+                                                onClick={() => handleAction(selectedMess._id, 'APPROVED')}
+                                            >
+                                                Approve Mess
+                                            </Button>
+                                        )}
+
+                                        <Button
+                                            variant="outline"
+                                            className="w-full h-12 border-primary/20 text-primary hover:bg-primary/5 font-bold"
+                                            onClick={() => {
+                                                setEditMess(selectedMess);
+                                                setSelectedMess(null);
+                                            }}
+                                        >
+                                            Edit Details
+                                        </Button>
+
+                                        {selectedMess.status === 'APPROVED' && (
+                                            <Button
+                                                variant="outline"
+                                                className="w-full h-12 border-yellow-500/20 text-yellow-600 hover:bg-yellow-500/5 font-bold"
+                                                onClick={() => handleAction(selectedMess._id, 'REJECTED')}
+                                            >
+                                                Unpublish / Reject
+                                            </Button>
+                                        )}
+
+                                        <div className="pt-4 mt-4 border-t border-foreground/5">
+                                            <Button
+                                                className="w-full h-12 bg-red-600 hover:bg-red-700 shadow-lg shadow-red-600/20 text-white font-bold"
+                                                onClick={() => handleAction(selectedMess._id, 'DELETE')}
+                                            >
+                                                Delete Permanent
+                                            </Button>
+                                        </div>
+                                    </div>
+
+                                    <div className="bg-blue-500/5 p-6 rounded-3xl border border-blue-500/10">
+                                        <h4 className="text-[10px] font-black uppercase text-blue-500 tracking-wider mb-2">Meta Info</h4>
+                                        <div className="space-y-2 text-xs">
+                                            <div className="flex justify-between"><span className="text-foreground/30">Created:</span> <span className="font-bold">{new Date(selectedMess.createdAt).toLocaleDateString()}</span></div>
+                                            <div className="flex justify-between"><span className="text-foreground/30">Last Update:</span> <span className="font-bold">{new Date(selectedMess.updatedAt).toLocaleDateString()}</span></div>
+                                            <div className="flex justify-between"><span className="text-foreground/30">V1.5 ID:</span> <span className="font-mono text-[10px] truncate ml-4">{selectedMess._id}</span></div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Edit Mess Modal */}
+            {editMess && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+                    <div className="bg-background w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-3xl shadow-2xl relative animate-in zoom-in-95 duration-200 border border-foreground/10">
+                        <button
+                            onClick={() => setEditMess(null)}
+                            className="absolute top-6 right-6 p-2 hover:bg-foreground/5 cursor-pointer rounded-full text-foreground transition-all z-10"
+                        >
+                            ✕
+                        </button>
+
+                        <div className="p-10">
+                            <MessForm
+                                onSubmit={handleUpdateMess}
+                                initialData={editMess}
+                                submitLabel="Save Changes"
+                                successMessage="Mess updated successfully!"
+                                description={`Editing: ${editMess.name}`}
+                            />
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Add New Mess Modal */}
+            {showAddForm && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+                    <div className="bg-background w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-3xl shadow-2xl relative animate-in zoom-in-95 duration-200 border border-foreground/10">
+                        <button
+                            onClick={() => setShowAddForm(false)}
+                            className="absolute top-6 right-6 p-2 hover:bg-foreground/5 cursor-pointer rounded-full text-foreground transition-all z-10"
+                        >
+                            ✕
+                        </button>
+
+                        <div className="p-10">
+                            <MessForm
+                                onSubmit={handleAddMess}
+                                submitLabel="Create Mess"
+                                successMessage="Mess created and published successfully!"
+                                description="Add a new mess entry directly to the system. Submissions from admin are automatically approved."
+                            />
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
     );
 }

@@ -31,7 +31,7 @@ export default async function Home() {
               Start Searching
             </Button>
           </Link>
-          <Link href="/admin" className="w-full sm:w-auto">
+          <Link href="/submit" className="w-full sm:w-auto">
             <Button variant="outline" size="lg" className="w-full">
               List Your Mess
             </Button>

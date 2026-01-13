@@ -7,7 +7,14 @@ export class MessRepository extends BaseRepository<IMess> implements IMessReposi
         super(Mess);
     }
 
-    async findByArea(area: string): Promise<IMess[]> {
-        return this.find({ area: { $regex: new RegExp(area, 'i') } } as any);
+    async findByArea(area: string, status: string = 'APPROVED'): Promise<IMess[]> {
+        return this.find({
+            area: { $regex: new RegExp(area, 'i') },
+            status: status
+        } as any);
+    }
+
+    async findByStatus(status: string): Promise<IMess[]> {
+        return this.find({ status } as any);
     }
 }

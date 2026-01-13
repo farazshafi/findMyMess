@@ -8,12 +8,20 @@ export class MessService {
         this.messRepository = messRepository;
     }
 
-    async getAllMesses(): Promise<IMess[]> {
-        return this.messRepository.find({});
+    async getAllMesses(status: string = 'APPROVED'): Promise<IMess[]> {
+        return this.messRepository.find({ status } as any);
     }
 
-    async searchMessesByArea(area: string): Promise<IMess[]> {
-        return this.messRepository.findByArea(area);
+    async searchMessesByArea(area: string, status: string = 'APPROVED'): Promise<IMess[]> {
+        return this.messRepository.findByArea(area, status);
+    }
+
+    async getPendingMesses(): Promise<IMess[]> {
+        return this.messRepository.findByStatus('PENDING');
+    }
+
+    async updateMessStatus(id: string, status: 'APPROVED' | 'REJECTED'): Promise<IMess | null> {
+        return this.messRepository.update(id, { status } as any);
     }
 
     async getMessById(id: string): Promise<IMess | null> {

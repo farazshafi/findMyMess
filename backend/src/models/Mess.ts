@@ -34,6 +34,8 @@ export interface IMess extends Document {
         public_id: string;
     };
     photos?: string[];
+    status: 'PENDING' | 'APPROVED' | 'REJECTED';
+    createdBy?: string;
     createdAt: Date;
     updatedAt: Date;
 }
@@ -76,6 +78,13 @@ const MessSchema: Schema = new Schema({
         public_id: { type: String }
     },
     photos: [{ type: String }],
+    status: {
+        type: String,
+        enum: ['PENDING', 'APPROVED', 'REJECTED'],
+        default: 'PENDING',
+        index: true
+    },
+    createdBy: { type: String },
 }, {
     timestamps: true
 });
